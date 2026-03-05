@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHand
 import styles from "./styles.module.scss";
 import { IconTrash } from "../icons";
 import { originalSetTimeout } from "../../utils/freeze-animations";
+import type { ChildComponentNode } from "../../utils/react-detection";
 
 // =============================================================================
 // Types
@@ -38,6 +39,10 @@ export interface AnnotationPopupCSSProps {
   lightMode?: boolean;
   /** Computed styles for the selected element */
   computedStyles?: Record<string, string>;
+  /** Child components with depth info */
+  childComponents?: ChildComponentNode[];
+  /** Source file location of the innermost React component */
+  sourceLocation?: string;
 }
 
 export interface AnnotationPopupCSSHandle {
@@ -66,6 +71,8 @@ export const AnnotationPopupCSS = forwardRef<AnnotationPopupCSSHandle, Annotatio
       isExiting = false,
       lightMode = false,
       computedStyles,
+      childComponents,
+      sourceLocation,
     },
     ref
   ) {
@@ -74,6 +81,7 @@ export const AnnotationPopupCSS = forwardRef<AnnotationPopupCSSHandle, Annotatio
     const [animState, setAnimState] = useState<"initial" | "enter" | "entered" | "exit">("initial");
     const [isFocused, setIsFocused] = useState(false);
     const [isStylesExpanded, setIsStylesExpanded] = useState(false); // Computed styles accordion state
+    const [isChildrenExpanded, setIsChildrenExpanded] = useState(false); // Child components accordion state
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const popupRef = useRef<HTMLDivElement>(null);
     const cancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -173,38 +181,71 @@ export const AnnotationPopupCSS = forwardRef<AnnotationPopupCSSHandle, Annotatio
         style={style}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Source location bar */}
+        {sourceLocation && (
+          <div
+            className={styles.styleProperty}
+            style={{
+              padding: "4px 10px",
+              fontSize: 10,
+              fontFamily: "monospace",
+              // color: lightMode ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.5)",
+              // borderBottom: lightMode ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.08)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            📄 {sourceLocation}
+          </div>
+        )}
         <div className={styles.header}>
           {computedStyles && Object.keys(computedStyles).length > 0 ? (
-            <button
-              className={styles.headerToggle}
-              onClick={() => {
-                const wasExpanded = isStylesExpanded;
-                setIsStylesExpanded(!isStylesExpanded);
-                if (wasExpanded) {
-                  // Refocus textarea when closing
-                  originalSetTimeout(() => textareaRef.current?.focus(), 0);
-                }
-              }}
-              type="button"
-            >
-              <svg
-                className={`${styles.chevron} ${isStylesExpanded ? styles.expanded : ""}`}
-                width="14"
-                height="14"
-                viewBox="0 0 14 14"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
+            <>
+              <button
+                className={styles.headerToggle}
+                onClick={() => {
+                  const wasExpanded = isStylesExpanded;
+                  setIsStylesExpanded(!isStylesExpanded);
+                  if (wasExpanded) {
+                    // Refocus textarea when closing
+                    originalSetTimeout(() => textareaRef.current?.focus(), 0);
+                  }
+                }}
+                type="button"
               >
-                <path
-                  d="M5.5 10.25L9 7.25L5.75 4"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <span className={styles.element}>{element}</span>
-            </button>
+                <svg
+                  className={`${styles.chevron} ${isStylesExpanded ? styles.expanded : ""}`}
+                  width="14"
+                  height="14"
+                  viewBox="0 0 14 14"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M5.5 10.25L9 7.25L5.75 4"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <span className={styles.element}>{element}</span>
+              </button>
+              {isStylesExpanded && (
+                <div
+                  style={{
+                    padding: "4px 10px",
+                    fontSize: 11,
+                    color: lightMode ? "rgba(0,0,0,0.65)" : "rgba(255,255,255,0.65)",
+                    wordBreak: "break-all",
+                    lineHeight: "16px",
+                  }}
+                >
+                  {element}
+                </div>
+              )}
+            </>
           ) : (
             <span className={styles.element}>{element}</span>
           )}
@@ -226,6 +267,56 @@ export const AnnotationPopupCSS = forwardRef<AnnotationPopupCSSHandle, Annotatio
                 ))}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Collapsible child components section */}
+        {childComponents && childComponents.length > 0 && (
+          <div className={`${styles.stylesWrapper} ${isChildrenExpanded ? styles.expanded : ""}`}>
+            <button
+              className={styles.headerToggle}
+              onClick={() => setIsChildrenExpanded(!isChildrenExpanded)}
+              type="button"
+              style={{ width: "100%", padding: "4px 8px", fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}
+            >
+              <svg
+                className={`${styles.chevron} ${isChildrenExpanded ? styles.expanded : ""}`}
+                width="12"
+                height="12"
+                viewBox="0 0 14 14"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M5.5 10.25L9 7.25L5.75 4"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span style={{ opacity: 0.7 }} className={styles.styleProperty}>Child components ({childComponents.length})</span>
+            </button>
+            {isChildrenExpanded && (
+              <div style={{ padding: "4px 8px 6px", fontSize: 11 }}>
+                {childComponents.map((child, idx) => (
+                  <div
+                    className={styles.styleProperty}
+                    key={`${child.name}-${idx}`}
+                    style={{
+                      paddingLeft: (child.level - 1) * 12,
+                      lineHeight: "18px",
+                      opacity: 0.85,
+                      // color: lightMode ? "#000" : "#fff",
+                    }}
+                  >
+                    <span style={{ opacity: 0.5, marginRight: 4 }}>{child.level > 1 ? "└" : "▸"}</span>
+                    <span className={styles.styleProperty} style={{ marginRight: 4 }}>L{child.level}</span>
+                    {child.name}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

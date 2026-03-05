@@ -70,7 +70,7 @@ import {
   deleteAnnotation as deleteAnnotationFromServer,
   requestAction,
 } from "../../utils/sync";
-import { getReactComponentName } from "../../utils/react-detection";
+import { getReactComponentName, type ChildComponentNode } from "../../utils/react-detection";
 import {
   freeze as freezeAll,
   unfreeze as unfreezeAll,
@@ -98,6 +98,10 @@ function identifyElementWithReact(
   path: string;
   /** React component path (e.g., '<SideNav> <LinkComponent>') */
   reactComponents: string | null;
+  /** Child components with depth info */
+  childComponents?: ChildComponentNode[];
+  /** Source file location of the innermost component */
+  sourceLocation?: string;
 } {
   const { name: elementName, path } = identifyElement(element);
 
@@ -113,6 +117,8 @@ function identifyElementWithReact(
     elementName,
     path,
     reactComponents: reactInfo.path,
+    childComponents: reactInfo.childComponents,
+    sourceLocation: reactInfo.sourceLocation,
   };
 }
 
@@ -129,6 +135,7 @@ type HoverInfo = {
   elementPath: string;
   rect: DOMRect | null;
   reactComponents?: string | null;
+  childComponents?: ChildComponentNode[];
 };
 
 type OutputDetailLevel = "compact" | "standard" | "detailed" | "forensic";
@@ -580,6 +587,8 @@ export function PageFeedbackToolbarCSS({
     targetElement?: HTMLElement;
     drawingIndex?: number;
     strokeId?: string;
+    childComponents?: ChildComponentNode[];
+    sourceLocation?: string;
   } | null>(null);
   const [copied, setCopied] = useState(false);
   const [sendState, setSendState] = useState<
@@ -758,12 +767,7 @@ export function PageFeedbackToolbarCSS({
   const [showEntranceAnimation, setShowEntranceAnimation] = useState(false);
 
   // Check if running on localhost - React detection only works locally
-  const isLocalhost =
-    typeof window !== "undefined" &&
-    (window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1" ||
-      window.location.hostname === "0.0.0.0" ||
-      window.location.hostname.endsWith(".local"));
+  const isLocalhost = true;
 
   // Effective React mode - derived from outputDetail when enabled
   const effectiveReactMode: ReactComponentMode =
@@ -1640,7 +1644,7 @@ export function PageFeedbackToolbarCSS({
         return;
       }
 
-      const { name, elementName, path, reactComponents } =
+      const { name, elementName, path, reactComponents, childComponents } =
         identifyElementWithReact(elementUnder, effectiveReactMode);
       const rect = elementUnder.getBoundingClientRect();
 
@@ -1650,6 +1654,7 @@ export function PageFeedbackToolbarCSS({
         elementPath: path,
         rect,
         reactComponents,
+        childComponents,
       });
       setHoverPosition({ x: e.clientX, y: e.clientY });
     };
@@ -1887,7 +1892,7 @@ export function PageFeedbackToolbarCSS({
       const elementUnder = deepElementFromPoint(e.clientX, e.clientY);
       if (!elementUnder) return;
 
-      const { name, path, reactComponents } = identifyElementWithReact(
+      const { name, path, reactComponents, childComponents, sourceLocation } = identifyElementWithReact(
         elementUnder,
         effectiveReactMode,
       );
@@ -1930,6 +1935,8 @@ export function PageFeedbackToolbarCSS({
         nearbyElements: getNearbyElements(elementUnder),
         reactComponents: reactComponents ?? undefined,
         targetElement: elementUnder, // Store for live position queries
+        childComponents,
+        sourceLocation,
       });
       setHoverInfo(null);
     };
@@ -5037,6 +5044,8 @@ export function PageFeedbackToolbarCSS({
                       element={pendingAnnotation.element}
                       selectedText={pendingAnnotation.selectedText}
                       computedStyles={pendingAnnotation.computedStylesObj}
+                      childComponents={pendingAnnotation.childComponents}
+                      sourceLocation={pendingAnnotation.sourceLocation}
                       placeholder={
                         pendingAnnotation.element === "Area selection"
                           ? "What should change in this area?"

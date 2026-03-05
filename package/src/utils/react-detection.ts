@@ -12,6 +12,13 @@ interface ReactFiber {
   type: ComponentType | string | null;
   elementType: ComponentType | null;
   return: ReactFiber | null;
+  child?: ReactFiber | null;
+  sibling?: ReactFiber | null;
+  _debugSource?: {
+    fileName?: string;
+    lineNumber?: number;
+    columnNumber?: number;
+  };
 }
 
 interface ComponentType {
@@ -505,7 +512,7 @@ function getComponentNameFromFiber(fiber: ReactFiber): string | null {
     const elType = elementType as ComponentType | null;
     if (elType?.render) {
       const innerName = getComponentNameFromType(elType.render);
-      if (innerName) return innerName;
+      if (innerName && innerName !== 'forwardRef' && innerName !== 'render') return innerName;
     }
     if (elType?.displayName) return elType.displayName;
     return getComponentNameFromType(type as ComponentType);
@@ -586,6 +593,13 @@ function getComponentNameFromFiber(fiber: ReactFiber): string | null {
 // Public API
 // =============================================================================
 
+export interface ChildComponentNode {
+  /** Depth level relative to parent (1 = direct child, 2 = grandchild, etc.) */
+  level: number;
+  /** Component name */
+  name: string;
+}
+
 /**
  * Result from React component detection
  */
@@ -594,6 +608,10 @@ export interface ReactComponentInfo {
   path: string | null;
   /** Array of component names from innermost to outermost */
   components: string[];
+  /** Child component tree with level info */
+  childComponents?: ChildComponentNode[];
+  /** Source file location of the innermost component, e.g. "NameCell.tsx(col: 5, line: 42)" */
+  sourceLocation?: string;
 }
 
 /**
@@ -605,6 +623,75 @@ function isMinifiedName(name: string): boolean {
   // All lowercase short names are likely minified
   if (name.length <= 3 && name === name.toLowerCase()) return true;
   return false;
+}
+
+/**
+ * Formats known component names to specify their origin library
+ */
+function formatComponentName(name: string, fiber: ReactFiber): string {
+  // Strip common HOC wrappers
+  const cleanName = name.split('/').pop();
+  
+  // Walk down the fiber to find its nearest DOM element and check for "gm-react-component" class
+  let child: ReactFiber | null | undefined = fiber.child;
+  let depth = 0;
+  while (child && depth < 5) {
+    if (child.tag === FiberTags.HostComponent && typeof child.type === "string") {
+      // Found a DOM element — check its stateNode for the class
+      const domNode = (child as any).stateNode as HTMLElement | null;
+      if (domNode?.classList?.contains("gm-react-component")) {
+        return `${cleanName} (@gapmaps/react-components)`;
+      }
+      break;
+    }
+    child = child.child;
+    depth++;
+  }
+  
+  return cleanName ?? '';
+}
+
+/**
+ * Recursively gets child component names with their depth level
+ */
+export function getChildReactComponents(
+  fiber: ReactFiber | null,
+  maxDepth: number = 3,
+  currentDepth: number = 0,
+  config: ResolvedConfig,
+): ChildComponentNode[] {
+  if (!fiber || currentDepth >= maxDepth) return [];
+
+  const components: ChildComponentNode[] = [];
+  const seen = new Set<string>();
+  let current: ReactFiber | null = fiber;
+
+  while (current) {
+    const name = getComponentNameFromFiber(current);
+    if (name && !isMinifiedName(name) && shouldIncludeComponent(name, currentDepth, config)) {
+      const formatted = formatComponentName(name, current);
+      const key = `${currentDepth + 1}:${formatted}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        components.push({ level: currentDepth + 1, name: formatted });
+      }
+    }
+
+    if (current.child) {
+      const childResults = getChildReactComponents(current.child, maxDepth, currentDepth + 1, config);
+      for (const child of childResults) {
+        const key = `${child.level}:${child.name}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          components.push(child);
+        }
+      }
+    }
+
+    current = current.sibling || null;
+  }
+
+  return components;
 }
 
 /**
@@ -646,6 +733,7 @@ export function getReactComponentName(
     resolved.mode === "smart" ? getAncestorClasses(element) : undefined;
 
   const components: string[] = [];
+  let sourceLocation: string | undefined;
 
   try {
     let fiber = getFiberFromElement(element);
@@ -664,12 +752,40 @@ export function getReactComponentName(
         !isMinifiedName(name) &&
         shouldIncludeComponent(name, depth, resolved, domClasses)
       ) {
-        components.push(name);
+        components.push(formatComponentName(name, fiber));
+        
+        // Capture source location from the first (innermost) matched component
+        if (!sourceLocation && fiber._debugSource) {
+          const src = fiber._debugSource;
+          if (src.fileName) {
+            const basename = src.fileName.split('/').pop() || src.fileName;
+            const parts: string[] = [];
+            if (src.lineNumber != null) parts.push(`line: ${src.lineNumber}`);
+            if (src.columnNumber != null) parts.push(`col: ${src.columnNumber}`);
+            sourceLocation = parts.length > 0
+              ? `${basename}(${parts.join(', ')})`
+              : basename;
+          }
+        }
       }
 
       fiber = fiber.return;
       depth++;
     }
+
+    // Get child components
+    if (components.length > 0) {
+      const initialFiber = getFiberFromElement(element);
+      if (initialFiber && initialFiber.child) {
+        const childComponents = getChildReactComponents(initialFiber.child, 5, 0, resolved);
+        
+        const path = components.slice().reverse().map((c) => `<${c}>`).join(" ");
+        const result: ReactComponentInfo = { path, components, childComponents, sourceLocation };
+        if (useCache) componentCacheAllRef.map.set(element, result);
+        return result;
+      }
+    }
+    
   } catch {
     // Fiber structure may be corrupted or inaccessible - return empty result
     const result: ReactComponentInfo = { path: null, components: [] };
