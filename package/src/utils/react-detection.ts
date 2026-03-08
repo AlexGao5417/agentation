@@ -14,6 +14,7 @@ interface ReactFiber {
   return: ReactFiber | null;
   child?: ReactFiber | null;
   sibling?: ReactFiber | null;
+  memoizedProps?: any;
   _debugSource?: {
     fileName?: string;
     lineNumber?: number;
@@ -612,6 +613,8 @@ export interface ReactComponentInfo {
   childComponents?: ChildComponentNode[];
   /** Source file location of the innermost component, e.g. "NameCell.tsx(col: 5, line: 42)" */
   sourceLocation?: string;
+  /** React props of the innermost matched component */
+  props?: Record<string, any>;
 }
 
 /**
@@ -734,6 +737,8 @@ export function getReactComponentName(
 
   const components: string[] = [];
   let sourceLocation: string | undefined;
+  let componentProps: Record<string, any> = {};
+  let foundInnerComponent = false;
 
   try {
     let fiber = getFiberFromElement(element);
@@ -754,7 +759,6 @@ export function getReactComponentName(
       ) {
         components.push(formatComponentName(name, fiber));
         
-        // Capture source location from the first (innermost) matched component
         if (!sourceLocation && fiber._debugSource) {
           const src = fiber._debugSource;
           if (src.fileName) {
@@ -767,8 +771,25 @@ export function getReactComponentName(
               : basename;
           }
         }
-      }
+              // Extract raw React props if this is the innermost component
+      if (!foundInnerComponent) {
+        foundInnerComponent = true;
 
+        // First try to get props directly from the Fiber node (custom components)
+        if (fiber.memoizedProps && typeof fiber.memoizedProps === 'object') {
+          componentProps = { ...fiber.memoizedProps };
+        } else { // Fallback: look for exactly __reactProps$ on the DOM element if it's the closest one
+          const reactPropsKey = Object.keys(element).find(k => k.startsWith("__reactProps$"));
+          if (reactPropsKey) {
+            componentProps = { ...componentProps, ...(element as any)[reactPropsKey] };
+          }
+        }
+        
+        if (componentProps.children) {
+          delete componentProps.children; // Ignore children to prevent huge circular trees
+        }
+      }
+    }
       fiber = fiber.return;
       depth++;
     }
@@ -780,7 +801,7 @@ export function getReactComponentName(
         const childComponents = getChildReactComponents(initialFiber.child, 5, 0, resolved);
         
         const path = components.slice().reverse().map((c) => `<${c}>`).join(" ");
-        const result: ReactComponentInfo = { path, components, childComponents, sourceLocation };
+        const result: ReactComponentInfo = { path, components, childComponents, sourceLocation, props: componentProps };
         if (useCache) componentCacheAllRef.map.set(element, result);
         return result;
       }

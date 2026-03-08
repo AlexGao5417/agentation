@@ -102,22 +102,30 @@ function identifyElementWithReact(
   childComponents?: ChildComponentNode[];
   /** Source file location of the innermost component */
   sourceLocation?: string;
+  /** React props */
+  props?: Record<string, any>;
+  /** React component name */
+  componentName?: string;
 } {
   const { name: elementName, path } = identifyElement(element);
 
-  // If React detection is off, just return element info
   if (reactMode === "off") {
-    return { name: elementName, elementName, path, reactComponents: null };
+    return { name: elementName, elementName, path, reactComponents: null, props: undefined, componentName: undefined };
   }
 
   const reactInfo = getReactComponentName(element, { mode: reactMode });
-
+  const bracketMatches = reactInfo?.path?.match(/<([^>]+)>/g) || [];
+  const componentName = bracketMatches.length > 0
+    ? bracketMatches[bracketMatches.length - 1].replace(/[<>]/g, '')
+    : reactInfo?.path as string;
   return {
     name: reactInfo.path ? `${reactInfo.path} ${elementName}` : elementName,
     elementName,
+    componentName,
     path,
     reactComponents: reactInfo.path,
     childComponents: reactInfo.childComponents,
+    props: reactInfo.props,
     sourceLocation: reactInfo.sourceLocation,
   };
 }
@@ -136,6 +144,8 @@ type HoverInfo = {
   rect: DOMRect | null;
   reactComponents?: string | null;
   childComponents?: ChildComponentNode[];
+  props?: Record<string, any>;
+  componentName?: string;
 };
 
 type OutputDetailLevel = "compact" | "standard" | "detailed" | "forensic";
@@ -403,7 +413,7 @@ function generateOutput(
       output += `- Device Pixel Ratio: ${window.devicePixelRatio}\n`;
     }
     output += `\n---\n`;
-  } else if (detailLevel !== "compact") {
+  } else if (detailLevel !== "compact" && detailLevel !== "standard") {
     output += `**Viewport:** ${viewport}\n`;
   }
   output += "\n";
@@ -450,31 +460,39 @@ function generateOutput(
         output += `**React:** ${a.reactComponents}\n`;
       }
       output += `**Feedback:** ${a.comment}\n\n`;
+    } else if (detailLevel === "standard") {
+      // Standard mode - simple todo-list format
+      output += `- [ ] **Task ${i + 1}:**\n`;
+      if (a.sourceLocation) {
+        output += `  - **Possible file location:** ${a.sourceLocation}\n`;
+      }
+      if (a.componentName) {
+        output += `  - **Possible component:** ${a.componentName}\n`;
+      }
+      output += `  - **Comment:** ${a.comment}\n`;
+      output += `\n`;
     } else {
-      // Standard and detailed modes
+      // Detailed mode
       output += `### ${i + 1}. ${a.element}\n`;
       output += `**Location:** ${a.elementPath}\n`;
 
-      // React components in both standard and detailed
       if (a.reactComponents) {
         output += `**React:** ${a.reactComponents}\n`;
       }
 
-      if (detailLevel === "detailed") {
-        if (a.cssClasses) {
-          output += `**Classes:** ${a.cssClasses}\n`;
-        }
+      if (a.cssClasses) {
+        output += `**Classes:** ${a.cssClasses}\n`;
+      }
 
-        if (a.boundingBox) {
-          output += `**Position:** ${Math.round(a.boundingBox.x)}px, ${Math.round(a.boundingBox.y)}px (${Math.round(a.boundingBox.width)}×${Math.round(a.boundingBox.height)}px)\n`;
-        }
+      if (a.boundingBox) {
+        output += `**Position:** ${Math.round(a.boundingBox.x)}px, ${Math.round(a.boundingBox.y)}px (${Math.round(a.boundingBox.width)}×${Math.round(a.boundingBox.height)}px)\n`;
       }
 
       if (a.selectedText) {
         output += `**Selected text:** "${a.selectedText}"\n`;
       }
 
-      if (detailLevel === "detailed" && a.nearbyText && !a.selectedText) {
+      if (a.nearbyText && !a.selectedText) {
         output += `**Context:** ${a.nearbyText.slice(0, 100)}\n`;
       }
 
@@ -589,6 +607,8 @@ export function PageFeedbackToolbarCSS({
     strokeId?: string;
     childComponents?: ChildComponentNode[];
     sourceLocation?: string;
+    props?: Record<string, any>;
+    componentName?: string;
   } | null>(null);
   const [copied, setCopied] = useState(false);
   const [sendState, setSendState] = useState<
@@ -1851,6 +1871,7 @@ export function PageFeedbackToolbarCSS({
               name,
               path,
               reactComponents: reactComponents ?? undefined,
+              props: identifyElementWithReact(elementUnder, effectiveReactMode).props,
             },
           ]);
         }
@@ -1892,7 +1913,7 @@ export function PageFeedbackToolbarCSS({
       const elementUnder = deepElementFromPoint(e.clientX, e.clientY);
       if (!elementUnder) return;
 
-      const { name, path, reactComponents, childComponents, sourceLocation } = identifyElementWithReact(
+      const { name, path, reactComponents, childComponents, sourceLocation, props, componentName } = identifyElementWithReact(
         elementUnder,
         effectiveReactMode,
       );
@@ -1937,6 +1958,8 @@ export function PageFeedbackToolbarCSS({
         targetElement: elementUnder, // Store for live position queries
         childComponents,
         sourceLocation,
+        props,
+        componentName,
       });
       setHoverInfo(null);
     };
@@ -2367,6 +2390,7 @@ export function PageFeedbackToolbarCSS({
             getDetailedComputedStyles(firstElement);
           const firstElementComputedStylesStr =
             getForensicComputedStyles(firstElement);
+          const firstElementProps = identifyElementWithReact(firstElement, effectiveReactMode).props;
 
           setPendingAnnotation({
             x,
@@ -2389,6 +2413,7 @@ export function PageFeedbackToolbarCSS({
             nearbyElements: getNearbyElements(firstElement),
             cssClasses: getElementClasses(firstElement),
             nearbyText: getNearbyText(firstElement),
+            props: firstElementProps,
           });
         } else {
           // No elements selected, but allow annotation on empty area
@@ -2591,11 +2616,13 @@ export function PageFeedbackToolbarCSS({
           const isFixed = stroke.fixed;
           let boundingBox: { x: number; y: number; width: number; height: number } | undefined;
 
-          if (elementUnder) {
-            const info = identifyElementWithReact(elementUnder, effectiveReactMode);
-            name = `Drawing: ${gestureShape} → ${info.name}`;
-            path = info.path;
-            reactComponents = info.reactComponents;
+            let reactProps: Record<string, any> | undefined;
+            if (elementUnder) {
+              const info = identifyElementWithReact(elementUnder, effectiveReactMode);
+              name = `Drawing: ${gestureShape} → ${info.name}`;
+              path = info.path;
+              reactComponents = info.reactComponents;
+              reactProps = info.props;
             nearbyText = getNearbyText(elementUnder);
             cssClasses = getElementClasses(elementUnder);
             fullPath = getFullElementPath(elementUnder);
@@ -2633,6 +2660,7 @@ export function PageFeedbackToolbarCSS({
             nearbyElements,
             reactComponents: reactComponents ?? undefined,
             targetElement: elementUnder ?? undefined,
+            props: reactProps,
             drawingIndex: strokeIdx,
             strokeId: stroke.id,
           });
@@ -2899,6 +2927,8 @@ export function PageFeedbackToolbarCSS({
         y: pendingAnnotation.y,
         comment,
         element: pendingAnnotation.element,
+        componentName: pendingAnnotation.componentName,
+        sourceLocation: pendingAnnotation.sourceLocation,
         elementPath: pendingAnnotation.elementPath,
         timestamp: Date.now(),
         selectedText: pendingAnnotation.selectedText,
@@ -4946,6 +4976,11 @@ export function PageFeedbackToolbarCSS({
                   {hoverInfo.reactComponents}
                 </div>
               )}
+              {hoverInfo.props && Object.keys(hoverInfo.props).length > 0 && (
+                <div style={{ marginTop: "4px", paddingTop: "4px", borderTop: "1px solid rgba(255,255,255,0.1)", fontSize: "11px", fontFamily: "monospace", color: "#a5d6ff", whiteSpace: "pre-wrap", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" }}>
+                  {Object.entries(hoverInfo.props).map(([k, v]) => `${k}: ${typeof v === 'object' ? '{...}' : String(v)}`).join('  |  ')}
+                </div>
+              )}
               <div className={styles.hoverElementName}>
                 {hoverInfo.elementName}
               </div>
@@ -5046,6 +5081,8 @@ export function PageFeedbackToolbarCSS({
                       computedStyles={pendingAnnotation.computedStylesObj}
                       childComponents={pendingAnnotation.childComponents}
                       sourceLocation={pendingAnnotation.sourceLocation}
+                      props={pendingAnnotation.props}
+                      componentName={pendingAnnotation.componentName}
                       placeholder={
                         pendingAnnotation.element === "Area selection"
                           ? "What should change in this area?"
@@ -5179,6 +5216,8 @@ export function PageFeedbackToolbarCSS({
                 computedStyles={parseComputedStylesString(
                   editingAnnotation.computedStyles,
                 )}
+                props={editingAnnotation.props}
+                componentName={editingAnnotation.componentName}
                 placeholder="Edit your feedback..."
                 initialValue={editingAnnotation.comment}
                 submitLabel="Save"

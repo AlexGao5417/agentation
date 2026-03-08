@@ -21,6 +21,9 @@ export type Annotation = {
   isMultiSelect?: boolean; // true if created via drag selection
   isFixed?: boolean; // true if element has fixed/sticky positioning (marker stays fixed)
   reactComponents?: string; // React component hierarchy (e.g. "<App> <Dashboard> <Button>")
+  props?: Record<string, any>; // React component props
+  componentName?: string; // React component name (innermost)
+  sourceLocation?: string; // Source file location of the innermost React component
   elementBoundingBoxes?: Array<{
     x: number;
     y: number;

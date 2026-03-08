@@ -43,12 +43,81 @@ export interface AnnotationPopupCSSProps {
   childComponents?: ChildComponentNode[];
   /** Source file location of the innermost React component */
   sourceLocation?: string;
+  /** React props */
+  props?: Record<string, any>;
+  /** React component name (innermost) */
+  componentName?: string;
 }
 
 export interface AnnotationPopupCSSHandle {
   /** Shake the popup (e.g., when user clicks outside) */
   shake: () => void;
 }
+
+// =============================================================================
+// Props Viewer
+// =============================================================================
+
+const PropsViewer = ({ data, name = "initial_props" }: { data: any; name?: string }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  if (typeof data !== "object" || data === null) {
+    let displayValue = String(data);
+    if (typeof data === "string") displayValue = `"${data}"`;
+    return (
+      <div style={{ paddingLeft: "16px", fontSize: "12px", fontFamily: "monospace", color: "#e5e5e5" }}>
+        <span style={{ color: "#a5d6ff" }}>{name}: </span>
+        <span style={{ color: typeof data === "number" || typeof data === "boolean" ? "#79c0ff" : "#ff7b72" }}>
+          {displayValue}
+        </span>
+      </div>
+    );
+  }
+
+  const isArray = Array.isArray(data);
+  const keys = Object.keys(data);
+  if (keys.length === 0) {
+    return (
+      <div style={{ paddingLeft: "16px", fontSize: "12px", fontFamily: "monospace", color: "#e5e5e5" }}>
+        <span style={{ color: "#a5d6ff" }}>{name}: </span>
+        <span>{isArray ? "[]" : "{}"}</span>
+      </div>
+    );
+  }
+
+  if (name === "initial_props") {
+    return (
+      <div style={{ fontSize: "12px", fontFamily: "monospace", color: "#e5e5e5" }}>
+        <div style={{ borderLeft: "1px solid rgba(255,255,255,0.1)", marginLeft: "6px" }}>
+          {keys.map((key) => (
+            <PropsViewer key={key} name={key} data={data[key as keyof typeof data]} />
+          ))}
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div style={{ paddingLeft: "16px", fontSize: "12px", fontFamily: "monospace", color: "#e5e5e5" }}>
+      <div
+        onClick={() => setExpanded(!expanded)}
+        style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+      >
+        <span style={{ display: "inline-block", width: "12px", textAlign: "center", color: "#8b949e", fontSize: "10px" }}>
+          {expanded ? "▼" : "▶"}
+        </span>
+        <span style={{ color: "#a5d6ff", paddingBottom: "2px" }}>{name}: </span>
+        <span style={{ color: "#8b949e", paddingBottom: "2px" }}>{isArray ? "[...]" : "{...}"}</span>
+      </div>
+      {expanded && (
+        <div style={{ paddingLeft: "8px", borderLeft: "1px solid rgba(255,255,255,0.1)", marginLeft: "6px" }}>
+          {keys.map((key) => (
+            <PropsViewer key={key} name={key} data={data[key as keyof typeof data]} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 // =============================================================================
 // Component
@@ -73,6 +142,8 @@ export const AnnotationPopupCSS = forwardRef<AnnotationPopupCSSHandle, Annotatio
       computedStyles,
       childComponents,
       sourceLocation,
+      props,
+      componentName
     },
     ref
   ) {
@@ -81,11 +152,15 @@ export const AnnotationPopupCSS = forwardRef<AnnotationPopupCSSHandle, Annotatio
     const [animState, setAnimState] = useState<"initial" | "enter" | "entered" | "exit">("initial");
     const [isFocused, setIsFocused] = useState(false);
     const [isStylesExpanded, setIsStylesExpanded] = useState(false); // Computed styles accordion state
+    const [isParentComponentsExpanded, setIsParentComponentsExpanded] = useState(false); // Parent components accordion state
     const [isChildrenExpanded, setIsChildrenExpanded] = useState(false); // Child components accordion state
+    const [isPropsExpanded, setIsPropsExpanded] = useState(false); // Props accordion state
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const popupRef = useRef<HTMLDivElement>(null);
     const cancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const shakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const bracketMatches = element.match(/<([^>]+)>/g) || [];
+    const parentComponents = bracketMatches.slice(0, -1).map(m => m.replace(/[<>]/g, ''));
 
     // Sync with parent exit state
     useEffect(() => {
@@ -181,144 +256,189 @@ export const AnnotationPopupCSS = forwardRef<AnnotationPopupCSSHandle, Annotatio
         style={style}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Source location bar */}
+        {/* Source location badge */}
         {sourceLocation && (
           <div
-            className={styles.styleProperty}
+            title={sourceLocation}
             style={{
-              padding: "4px 10px",
-              fontSize: 10,
-              fontFamily: "monospace",
-              // color: lightMode ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.5)",
-              // borderBottom: lightMode ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.08)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "2px 6px",
+              borderRadius: "4px",
+              background: lightMode ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.1)",
+              fontSize: "9px",
+              fontWeight: 600,
+              color: lightMode ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.7)",
               whiteSpace: "nowrap",
+              marginBottom: "6px",
             }}
           >
-            📄 {sourceLocation}
+            <svg style={{ marginRight: 4, opacity: 0.7 }} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            {sourceLocation.split('/').pop()}
           </div>
         )}
-        <div className={styles.header}>
-          {computedStyles && Object.keys(computedStyles).length > 0 ? (
-            <>
-              <button
-                className={styles.headerToggle}
-                onClick={() => {
-                  const wasExpanded = isStylesExpanded;
-                  setIsStylesExpanded(!isStylesExpanded);
-                  if (wasExpanded) {
-                    // Refocus textarea when closing
-                    originalSetTimeout(() => textareaRef.current?.focus(), 0);
-                  }
-                }}
-                type="button"
-              >
-                <svg
-                  className={`${styles.chevron} ${isStylesExpanded ? styles.expanded : ""}`}
-                  width="14"
-                  height="14"
-                  viewBox="0 0 14 14"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    d="M5.5 10.25L9 7.25L5.75 4"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                <span className={styles.element}>{element}</span>
-              </button>
-              {isStylesExpanded && (
-                <div
-                  style={{
-                    padding: "4px 10px",
-                    fontSize: 11,
-                    color: lightMode ? "rgba(0,0,0,0.65)" : "rgba(255,255,255,0.65)",
-                    wordBreak: "break-all",
-                    lineHeight: "16px",
-                  }}
-                >
-                  {element}
-                </div>
-              )}
-            </>
-          ) : (
-            <span className={styles.element}>{element}</span>
-          )}
+
+        <div style={{
+          fontSize: "15px",
+          fontWeight: 600,
+          color: lightMode ? "#111" : "#fff",
+          marginBottom: parentComponents.length > 0 ? "4px" : "10px",
+          lineHeight: 1.3,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}>
+          <span>{componentName}</span>
           {timestamp && <span className={styles.timestamp}>{timestamp}</span>}
         </div>
+        {/* --- Metadata Accordions --- */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 0, marginBottom: "12px", borderRadius: "6px", border: lightMode ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.1)" }}>
 
-        {/* Collapsible computed styles section - uses grid-template-rows for smooth animation */}
-        {computedStyles && Object.keys(computedStyles).length > 0 && (
-          <div className={`${styles.stylesWrapper} ${isStylesExpanded ? styles.expanded : ""}`}>
-            <div className={styles.stylesInner}>
-              <div className={styles.stylesBlock}>
-                {Object.entries(computedStyles).map(([key, value]) => (
-                  <div key={key} className={styles.styleLine}>
-                    <span className={styles.styleProperty}>
-                      {key.replace(/([A-Z])/g, "-$1").toLowerCase()}
-                    </span>
-                    : <span className={styles.styleValue}>{value}</span>;
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* Collapsible child components section */}
-        {childComponents && childComponents.length > 0 && (
-          <div className={`${styles.stylesWrapper} ${isChildrenExpanded ? styles.expanded : ""}`}>
+          {/* Parent components breadcrumb */}
+          <div className={`${styles.infoAccordion} ${isParentComponentsExpanded ? styles.expanded : ""}`} style={{ borderTop: "none" }}>
             <button
-              className={styles.headerToggle}
-              onClick={() => setIsChildrenExpanded(!isChildrenExpanded)}
+              className={styles.accordionHeader}
+              onClick={() => setIsParentComponentsExpanded(!isParentComponentsExpanded)}
               type="button"
-              style={{ width: "100%", padding: "4px 8px", fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}
             >
-              <svg
-                className={`${styles.chevron} ${isChildrenExpanded ? styles.expanded : ""}`}
-                width="12"
-                height="12"
-                viewBox="0 0 14 14"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M5.5 10.25L9 7.25L5.75 4"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+              <svg className={`${styles.chevron} ${isParentComponentsExpanded ? styles.expanded : ""}`} width="12" height="12" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M5.5 10.25L9 7.25L5.75 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <span style={{ opacity: 0.7 }} className={styles.styleProperty}>Child components ({childComponents.length})</span>
+              <span className={styles.label}>Parent Components</span>
+              <span className={styles.count}>{parentComponents.length}</span>
             </button>
-            {isChildrenExpanded && (
-              <div style={{ padding: "4px 8px 6px", fontSize: 11 }}>
-                {childComponents.map((child, idx) => (
-                  <div
-                    className={styles.styleProperty}
-                    key={`${child.name}-${idx}`}
-                    style={{
-                      paddingLeft: (child.level - 1) * 12,
-                      lineHeight: "18px",
-                      opacity: 0.85,
-                      // color: lightMode ? "#000" : "#fff",
-                    }}
-                  >
-                    <span style={{ opacity: 0.5, marginRight: 4 }}>{child.level > 1 ? "└" : "▸"}</span>
-                    <span className={styles.styleProperty} style={{ marginRight: 4 }}>L{child.level}</span>
-                    {child.name}
-                  </div>
+            {isParentComponentsExpanded && parentComponents.length > 0 && (
+              <div className={styles.infoAccordionContent} style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: "2px",
+                marginBottom: "10px",
+                fontSize: "10px",
+                fontFamily: "monospace",
+                color: lightMode ? "rgba(0,0,0,0.45)" : "rgba(255,255,255,0.4)",
+                lineHeight: 1.6,
+              }}>
+                {parentComponents.map((parent, i) => (
+                  <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: "2px" }}>
+                    <span style={{
+                      color: lightMode ? "#0070f3" : "#79c0ff",
+                      fontWeight: 500,
+                    }}>{parent}</span>
+                    {i < parentComponents.length - 1 && (
+                      <span style={{ opacity: 0.5, margin: "0 1px" }}>›</span>
+                    )}
+                  </span>
                 ))}
               </div>
             )}
           </div>
-        )}
+          {/* Computed Styles Accordion */}
+          {computedStyles && Object.keys(computedStyles).length > 0 && (
+            <div className={`${styles.infoAccordion} ${isStylesExpanded ? styles.expanded : ""}`}>
+              <button
+                className={styles.accordionHeader}
+                onClick={() => setIsStylesExpanded(!isStylesExpanded)}
+                type="button"
+              >
+                <svg className={`${styles.chevron} ${isStylesExpanded ? styles.expanded : ""}`} width="12" height="12" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M5.5 10.25L9 7.25L5.75 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span className={styles.label}>Styles</span>
+                <span className={styles.count}>{Object.keys(computedStyles).length}</span>
+              </button>
+              {isStylesExpanded && <div className={styles.infoAccordionInner}>
+                <div className={styles.infoAccordionContent}>
+                  <div className={styles.stylesBlock}>
+                    {Object.entries(computedStyles).map(([key, value]) => (
+                      <div key={key} className={styles.styleLine}>
+                        <span className={styles.styleProperty}>{key.replace(/([A-Z])/g, "-$1").toLowerCase()}</span>
+                        <span style={{ opacity: 0.5 }}>:</span>
+                        <span className={styles.styleValue}>{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>}
+            </div>
+          )}
+
+          {/* Child Components Accordion */}
+          {childComponents && childComponents.length > 0 && (
+            <div className={`${styles.infoAccordion} ${isChildrenExpanded ? styles.expanded : ""}`}>
+              <button
+                className={styles.accordionHeader}
+                onClick={() => setIsChildrenExpanded(!isChildrenExpanded)}
+                type="button"
+              >
+                <svg className={`${styles.chevron} ${isChildrenExpanded ? styles.expanded : ""}`} width="12" height="12" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M5.5 10.25L9 7.25L5.75 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span className={styles.label}>Children</span>
+                <span className={styles.count}>{childComponents.length}</span>
+              </button>
+              {isChildrenExpanded && <div className={styles.infoAccordionInner}>
+                <div className={styles.infoAccordionContent} style={{ paddingTop: 0 }}>
+                  {childComponents.map((child, idx) => (
+                    <div
+                      key={`${child.name}-${idx}`}
+                      style={{
+                        paddingLeft: (child.level - 1) * 12,
+                        lineHeight: "20px",
+                        fontSize: "11px",
+                        fontFamily: "monospace",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4
+                      }}
+                    >
+                      <span style={{ color: lightMode ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.3)" }}>
+                        {child.level > 1 ? "└" : "▸"}
+                      </span>
+                      <span style={{
+                        color: lightMode ? "#e36209" : "#ff7b72", // GitHub syntax orange/red
+                        fontWeight: 600
+                      }}>
+                        &lt;{child.name}&gt;
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>}
+            </div>
+          )}
+
+          {/* Props Accordion */}
+          {props && Object.keys(props).length > 0 && (
+            <div className={`${styles.infoAccordion} ${isPropsExpanded ? styles.expanded : ""}`}>
+              <button
+                className={styles.accordionHeader}
+                onClick={() => setIsPropsExpanded(!isPropsExpanded)}
+                type="button"
+              >
+                <svg className={`${styles.chevron} ${isPropsExpanded ? styles.expanded : ""}`} width="12" height="12" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M5.5 10.25L9 7.25L5.75 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span className={styles.label}>React Props</span>
+                <span className={styles.count}>{Object.keys(props).length}</span>
+              </button>
+              {isPropsExpanded && <div className={styles.infoAccordionInner}>
+                <div className={styles.infoAccordionContent} style={{ paddingTop: 0 }}>
+                  <div style={{
+                    background: lightMode ? "rgba(0,0,0,0.02)" : "rgba(0,0,0,0.15)",
+                    border: lightMode ? "1px solid rgba(0,0,0,0.05)" : "1px solid rgba(255,255,255,0.05)",
+                    borderRadius: "4px",
+                    padding: "4px",
+                  }}>
+                    <PropsViewer data={props} name="initial_props" />
+                  </div>
+                </div>
+              </div>}
+            </div>
+          )}
+
+        </div> {/* End Meta Section */}
 
         {selectedText && (
           <div className={styles.quote}>
@@ -330,7 +450,7 @@ export const AnnotationPopupCSS = forwardRef<AnnotationPopupCSSHandle, Annotatio
         <textarea
           ref={textareaRef}
           className={styles.textarea}
-          style={{ borderColor: isFocused ? accentColor : undefined }}
+          style={{ borderColor: isFocused ? accentColor : undefined, boxSizing: "border-box" }}
           placeholder={placeholder}
           value={text}
           onChange={(e) => setText(e.target.value)}
