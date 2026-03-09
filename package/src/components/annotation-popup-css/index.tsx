@@ -309,27 +309,30 @@ export const AnnotationPopupCSS = forwardRef<AnnotationPopupCSSHandle, Annotatio
               <span className={styles.count}>{parentComponents.length}</span>
             </button>
             {isParentComponentsExpanded && parentComponents.length > 0 && (
-              <div className={styles.infoAccordionContent} style={{
-                display: "flex",
-                flexWrap: "wrap",
-                alignItems: "center",
-                gap: "2px",
-                marginBottom: "10px",
-                fontSize: "10px",
-                fontFamily: "monospace",
-                color: lightMode ? "rgba(0,0,0,0.45)" : "rgba(255,255,255,0.4)",
-                lineHeight: 1.6,
-              }}>
-                {parentComponents.map((parent, i) => (
-                  <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: "2px" }}>
+              <div className={styles.infoAccordionContent}>
+                {parentComponents.map((name, idx) => (
+                  <div
+                    key={`${name}-${idx}`}
+                    style={{
+                      paddingLeft: (idx) * 12,
+                      lineHeight: "20px",
+                      fontSize: "11px",
+                      fontFamily: "monospace",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4
+                    }}
+                  >
+                    <span style={{ color: lightMode ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.3)" }}>
+                      {idx > 0 && "└"}
+                    </span>
                     <span style={{
-                      color: lightMode ? "#0070f3" : "#79c0ff",
-                      fontWeight: 500,
-                    }}>{parent}</span>
-                    {i < parentComponents.length - 1 && (
-                      <span style={{ opacity: 0.5, margin: "0 1px" }}>›</span>
-                    )}
-                  </span>
+                      color: lightMode ? "#e36209" : "#ff7b72", // GitHub syntax orange/red
+                      fontWeight: 600
+                    }}>
+                      &lt;{name}&gt;
+                    </span>
+                  </div>
                 ))}
               </div>
             )}
@@ -394,7 +397,7 @@ export const AnnotationPopupCSS = forwardRef<AnnotationPopupCSSHandle, Annotatio
                       }}
                     >
                       <span style={{ color: lightMode ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.3)" }}>
-                        {child.level > 1 ? "└" : "▸"}
+                        {child.level > 1 && "└"}
                       </span>
                       <span style={{
                         color: lightMode ? "#e36209" : "#ff7b72", // GitHub syntax orange/red

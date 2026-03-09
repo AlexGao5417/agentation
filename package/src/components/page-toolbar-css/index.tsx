@@ -70,7 +70,7 @@ import {
   deleteAnnotation as deleteAnnotationFromServer,
   requestAction,
 } from "../../utils/sync";
-import { getReactComponentName, type ChildComponentNode } from "../../utils/react-detection";
+import { getReactComponentName, isReactPage, type ChildComponentNode } from "../../utils/react-detection";
 import {
   freeze as freezeAll,
   unfreeze as unfreezeAll,
@@ -786,12 +786,17 @@ export function PageFeedbackToolbarCSS({
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [showEntranceAnimation, setShowEntranceAnimation] = useState(false);
 
-  // Check if running on localhost - React detection only works locally
-  const isLocalhost = true;
+  // Detect whether the page supports React inspection
+  const [reactSupported, setReactSupported] = useState(false);
+  useEffect(() => {
+    // Delay probe slightly so DOM is populated
+    const timer = setTimeout(() => setReactSupported(isReactPage()), 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Effective React mode - derived from outputDetail when enabled
   const effectiveReactMode: ReactComponentMode =
-    isLocalhost && settings.reactEnabled
+    reactSupported && settings.reactEnabled
       ? OUTPUT_TO_REACT_MODE[settings.outputDetail]
       : "off";
 
@@ -4254,7 +4259,7 @@ export function PageFeedbackToolbarCSS({
                   </div>
 
                   <div
-                    className={`${styles.settingsRow} ${styles.settingsRowMarginTop} ${!isLocalhost ? styles.settingsRowDisabled : ""}`}
+                    className={`${styles.settingsRow} ${styles.settingsRowMarginTop} ${!reactSupported ? styles.settingsRowDisabled : ""}`}
                   >
                     <div
                       className={`${styles.settingsLabel} ${!isDarkMode ? styles.light : ""}`}
@@ -4262,7 +4267,7 @@ export function PageFeedbackToolbarCSS({
                       React Components
                       <Tooltip
                         content={
-                          !isLocalhost
+                          !reactSupported
                             ? "Disabled — production builds minify component names, making detection unreliable. Use on localhost in development mode."
                             : "Include React component names in annotations"
                         }
@@ -4273,12 +4278,12 @@ export function PageFeedbackToolbarCSS({
                       </Tooltip>
                     </div>
                     <label
-                      className={`${styles.toggleSwitch} ${!isLocalhost ? styles.disabled : ""}`}
+                      className={`${styles.toggleSwitch} ${!reactSupported ? styles.disabled : ""}`}
                     >
                       <input
                         type="checkbox"
-                        checked={isLocalhost && settings.reactEnabled}
-                        disabled={!isLocalhost}
+                        checked={reactSupported && settings.reactEnabled}
+                        disabled={!reactSupported}
                         onChange={() =>
                           setSettings((s) => ({
                             ...s,
