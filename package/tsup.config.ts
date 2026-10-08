@@ -92,6 +92,7 @@ export default defineConfig((options) => [
     sourcemap: true,
     clean: !options.watch,
     external: ["react", "react-dom"],
+    noExternal: ["dom-accessibility-api"],
     esbuildPlugins: [scssModulesPlugin()],
     define: {
       __VERSION__: JSON.stringify(VERSION),

@@ -297,6 +297,7 @@ type Annotation = {
   comment: string;
   element: string;
   elementPath: string;
+  elementLocator?: string;
   url?: string;
   intent?: string;
   severity?: string;
@@ -524,6 +525,7 @@ export async function handleTool(name: string, args: unknown): Promise<ToolResul
           comment: a.comment,
           element: a.element,
           elementPath: a.elementPath,
+          elementLocator: a.elementLocator,
           url: a.url,
           intent: a.intent,
           severity: a.severity,
@@ -543,6 +545,7 @@ export async function handleTool(name: string, args: unknown): Promise<ToolResul
           comment: a.comment,
           element: a.element,
           elementPath: a.elementPath,
+          elementLocator: a.elementLocator,
           url: a.url,
           intent: a.intent,
           severity: a.severity,
@@ -647,6 +650,7 @@ export async function handleTool(name: string, args: unknown): Promise<ToolResul
               comment: a.comment,
               element: a.element,
               elementPath: a.elementPath,
+              elementLocator: a.elementLocator,
               url: a.url,
               intent: a.intent,
               severity: a.severity,
@@ -677,6 +681,7 @@ export async function handleTool(name: string, args: unknown): Promise<ToolResul
               comment: a.comment,
               element: a.element,
               elementPath: a.elementPath,
+              elementLocator: a.elementLocator,
               url: a.url,
               intent: a.intent,
               severity: a.severity,

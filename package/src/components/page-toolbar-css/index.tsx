@@ -79,6 +79,7 @@ import {
 } from "../../utils/freeze-animations";
 
 import type { Annotation } from "../../types";
+import { getElementLocator, getAnnotationLocator } from "../../utils/element-locator";
 import styles from "./styles.module.scss";
 
 /**
@@ -419,15 +420,17 @@ function generateOutput(
   output += "\n";
 
   annotations.forEach((a, i) => {
+    const locator = getAnnotationLocator(a);
     if (detailLevel === "compact") {
-      output += `${i + 1}. **${a.element}**: ${a.comment}`;
+      output += `${i + 1}. ${locator} **Feedback:** ${a.comment}`;
       if (a.selectedText) {
         output += ` (re: "${a.selectedText.slice(0, 30)}${a.selectedText.length > 30 ? "..." : ""}")`;
       }
       output += "\n";
     } else if (detailLevel === "forensic") {
       // Forensic mode - order matches output page example
-      output += `### ${i + 1}. ${a.element}\n`;
+      output += `### ${i + 1}. Annotation\n`;
+      output += `**Find:** ${locator}\n`;
       if (a.isMultiSelect && a.fullPath) {
         output += `*Forensic data shown for first element of selection*\n`;
       }
@@ -463,18 +466,13 @@ function generateOutput(
     } else if (detailLevel === "standard") {
       // Standard mode - simple todo-list format
       output += `- [ ] **Task ${i + 1}:**\n`;
-      if (a.sourceLocation) {
-        output += `  - **Possible file location:** ${a.sourceLocation}\n`;
-      }
-      if (a.componentName) {
-        output += `  - **Possible component:** ${a.componentName}\n`;
-      }
+      output += `  - **Find:** ${locator}\n`;
       output += `  - **Comment:** ${a.comment}\n`;
       output += `\n`;
     } else {
       // Detailed mode
-      output += `### ${i + 1}. ${a.element}\n`;
-      output += `**Location:** ${a.elementPath}\n`;
+      output += `### ${i + 1}. Annotation\n`;
+      output += `**Find:** ${locator}\n`;
 
       if (a.reactComponents) {
         output += `**React:** ${a.reactComponents}\n`;
@@ -1358,6 +1356,7 @@ export function PageFeedbackToolbarCSS({
             comment: demo.comment,
             element: name,
             elementPath: path,
+            elementLocator: getElementLocator(element),
             timestamp: Date.now(),
             selectedText: demo.selectedText,
             boundingBox: {
@@ -1479,6 +1478,7 @@ export function PageFeedbackToolbarCSS({
         cssClasses: getElementClasses(firstEl),
         nearbyText: getNearbyText(firstEl),
         reactComponents: firstItem.reactComponents,
+        targetElement: firstEl,
       });
     } else {
       // Multiple elements - multi-select annotation
@@ -2419,6 +2419,7 @@ export function PageFeedbackToolbarCSS({
             cssClasses: getElementClasses(firstElement),
             nearbyText: getNearbyText(firstElement),
             props: firstElementProps,
+            multiSelectElements: finalElements.map(({ element }) => element),
           });
         } else {
           // No elements selected, but allow annotation on empty area
@@ -2926,6 +2927,14 @@ export function PageFeedbackToolbarCSS({
     (comment: string) => {
       if (!pendingAnnotation) return;
 
+      const targetElements = pendingAnnotation.multiSelectElements ??
+        (pendingAnnotation.targetElement ? [pendingAnnotation.targetElement] : []);
+      const elementLocator = targetElements.length > 1
+        ? targetElements.map((element, index) =>
+            `Selected component ${index + 1}: ${getElementLocator(element) ?? "No data test ID or accessibility role/name was found."}`,
+          ).join(" ")
+        : targetElements[0] ? getElementLocator(targetElements[0]) : undefined;
+
       const newAnnotation: Annotation = {
         id: Date.now().toString(),
         x: pendingAnnotation.x,
@@ -2935,6 +2944,7 @@ export function PageFeedbackToolbarCSS({
         componentName: pendingAnnotation.componentName,
         sourceLocation: pendingAnnotation.sourceLocation,
         elementPath: pendingAnnotation.elementPath,
+        elementLocator,
         timestamp: Date.now(),
         selectedText: pendingAnnotation.selectedText,
         boundingBox: pendingAnnotation.boundingBox,

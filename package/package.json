@@ -1,6 +1,6 @@
 {
   "name": "agentation-alex",
-  "version": "2.2.1-beta.1",
+  "version": "2.2.1-beta.2",
   "description": "Visual feedback for AI coding agents",
   "license": "PolyForm-Shield-1.0.0",
   "main": "./dist/index.js",
@@ -28,7 +28,7 @@
     "dev": "pnpm build && pnpm watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "pnpm build"
+    "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
     "react": ">=18.0.0",
@@ -48,6 +48,7 @@
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.3.0",
+    "dom-accessibility-api": "0.7.0",
     "esbuild-sass-plugin": "^3.6.0",
     "jsdom": "^25.0.0",
     "postcss": "^8.5.6",

@@ -9,6 +9,7 @@ export type Annotation = {
   comment: string;
   element: string;
   elementPath: string;
+  elementLocator?: string;
   timestamp: number;
   selectedText?: string;
   boundingBox?: { x: number; y: number; width: number; height: number };

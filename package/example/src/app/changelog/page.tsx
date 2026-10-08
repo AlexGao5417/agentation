@@ -30,6 +30,14 @@ function isMajorVersion(version: string): boolean {
 
 const releases: Release[] = [
   {
+    version: "2.2.1-beta.2",
+    date: "October 9, 2026",
+    changes: [
+      { type: "improved", text: "Copied annotations use data test IDs and accessibility role/name to identify the selected component, its ancestor, or a nearby component" },
+      { type: "added", text: "Locator descriptions persist with saved annotations" },
+    ],
+  },
+  {
     version: "2.2.1",
     date: "February 11, 2026",
     changes: [

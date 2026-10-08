@@ -18,6 +18,10 @@
       "type": "string",
       "description": "CSS selector path (e.g. \"body > main > button.cta\")"
     },
+    "elementLocator": {
+      "type": "string",
+      "description": "English location description using data test IDs and accessibility role/name"
+    },
     "timestamp": {
       "type": "number",
       "description": "Unix timestamp in milliseconds"

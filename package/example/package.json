@@ -8,7 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
-    "agentation": "workspace:*",
+    "agentation": "workspace:agentation-alex@*",
     "beautiful-mermaid": "^0.1.2",
     "framer-motion": "^12.28.1",
     "next": "^14.0.0",

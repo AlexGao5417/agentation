@@ -1,20 +1,22 @@
 <img src="https://raw.githubusercontent.com/benjitaylor/agentation/main/package/logo.svg" alt="Agentation" width="50" />
 
-[![npm version](https://img.shields.io/npm/v/agentation)](https://www.npmjs.com/package/agentation)
-[![downloads](https://img.shields.io/npm/dm/agentation)](https://www.npmjs.com/package/agentation)
+[![npm version](https://img.shields.io/npm/v/agentation-alex)](https://www.npmjs.com/package/agentation-alex)
+[![downloads](https://img.shields.io/npm/dm/agentation-alex)](https://www.npmjs.com/package/agentation-alex)
 
 **[Agentation](https://agentation.dev)** is an agent-agnostic visual feedback tool. Click elements on your page, add notes, and copy structured output that helps AI coding agents find the exact code you're referring to.
+
+This fork copies English locator descriptions using data test IDs and accessibility role/name. The descriptions identify the selected component, its ancestor, or a nearby component.
 
 ## Install
 
 ```bash
-npm install agentation -D
+npm install agentation-alex -D
 ```
 
 ## Usage
 
 ```tsx
-import { Agentation } from 'agentation';
+import { Agentation } from 'agentation-alex';
 
 function App() {
   return (

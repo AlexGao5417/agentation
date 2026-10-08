@@ -9,6 +9,7 @@ export type Annotation = {
   comment: string;
   element: string;
   elementPath: string;
+  elementLocator?: string; // English description using test IDs and accessibility role/name
   timestamp: number;
   selectedText?: string;
   boundingBox?: { x: number; y: number; width: number; height: number };
@@ -88,4 +89,3 @@ export type ThreadMessage = {
   content: string;
   timestamp: number;
 };
-

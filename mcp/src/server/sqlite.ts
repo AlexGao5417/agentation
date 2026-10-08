@@ -136,6 +136,13 @@ function initDatabase(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_events_session_seq ON events(session_id, sequence);
     CREATE INDEX IF NOT EXISTS idx_events_user ON events(user_id);
   `);
+
+  const annotationColumns = db.prepare("PRAGMA table_info(annotations)").all();
+  if (!annotationColumns.some((column) =>
+    typeof column === "object" && column !== null && "name" in column && column.name === "element_locator",
+  )) {
+    db.exec("ALTER TABLE annotations ADD COLUMN element_locator TEXT");
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -201,6 +208,7 @@ function rowToAnnotation(row: Record<string, unknown>): Annotation {
     comment: row.comment as string,
     element: row.element as string,
     elementPath: row.element_path as string,
+    elementLocator: typeof row.element_locator === "string" ? row.element_locator : undefined,
     timestamp: row.timestamp as number,
     selectedText: row.selected_text as string | undefined,
     boundingBox: row.bounding_box ? JSON.parse(row.bounding_box as string) : undefined,
@@ -257,13 +265,13 @@ export function createSQLiteStore(dbPath?: string): AFSStore {
     // Annotations
     insertAnnotation: db.prepare(`
       INSERT INTO annotations (
-        id, session_id, x, y, comment, element, element_path, timestamp,
+        id, session_id, x, y, comment, element, element_path, element_locator, timestamp,
         selected_text, bounding_box, nearby_text, css_classes, nearby_elements,
         computed_styles, full_path, accessibility, is_multi_select, is_fixed,
         react_components, url, intent, severity, status, thread, created_at,
         updated_at, resolved_at, resolved_by, author_id
       ) VALUES (
-        @id, @sessionId, @x, @y, @comment, @element, @elementPath, @timestamp,
+        @id, @sessionId, @x, @y, @comment, @element, @elementPath, @elementLocator, @timestamp,
         @selectedText, @boundingBox, @nearbyText, @cssClasses, @nearbyElements,
         @computedStyles, @fullPath, @accessibility, @isMultiSelect, @isFixed,
         @reactComponents, @url, @intent, @severity, @status, @thread, @createdAt,
@@ -401,6 +409,7 @@ export function createSQLiteStore(dbPath?: string): AFSStore {
         comment: annotation.comment,
         element: annotation.element,
         elementPath: annotation.elementPath,
+        elementLocator: annotation.elementLocator ?? null,
         timestamp: annotation.timestamp,
         selectedText: annotation.selectedText ?? null,
         boundingBox: annotation.boundingBox ? JSON.stringify(annotation.boundingBox) : null,

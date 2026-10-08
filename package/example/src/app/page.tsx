@@ -278,7 +278,7 @@ export default function AgentationDocs() {
 
           <div className="demo-elements">
             <div className="button-group">
-              <button className="demo-button" onClick={() => alert("Primary clicked!")}>Primary</button>
+              <button data-testid="demo-primary" className="demo-button" onClick={() => alert("Primary clicked!")}>Primary</button>
               <button className="demo-button secondary" onClick={() => alert("Secondary clicked!")}>Secondary</button>
               <button className="demo-button" onClick={openModal} style={{ background: '#3c82f7' }}>Modal</button>
               <button className="demo-button" onClick={openShadowModal} style={{ background: '#7c3aed' }}>Shadow Modal</button>

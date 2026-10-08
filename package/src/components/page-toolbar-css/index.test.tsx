@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { PageFeedbackToolbarCSS } from "./index";
 import type { Annotation } from "../../types";
 
@@ -9,6 +9,9 @@ const mockClipboard = {
 };
 
 beforeEach(() => {
+  vi.stubGlobal("localStorage", document.defaultView?.localStorage);
+  localStorage.clear();
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
   vi.stubGlobal("navigator", {
     clipboard: mockClipboard,
     userAgent: "test-agent",
@@ -17,10 +20,68 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  Reflect.deleteProperty(document, "elementFromPoint");
   vi.unstubAllGlobals();
 });
 
 describe("PageFeedbackToolbarCSS", () => {
+  describe("locator output", () => {
+    it.each(["compact", "standard", "detailed", "forensic"])(
+      "copies saved identifiers in %s mode",
+      async (outputDetail) => {
+        const locator = 'Find the component that has data test ID (data-testid) equal to "save-report" and accessibility role equal to "button" and name equal to "Save report".';
+        localStorage.setItem("feedback-toolbar-settings", JSON.stringify({ outputDetail }));
+        localStorage.setItem(`feedback-annotations-${window.location.pathname}`, JSON.stringify([{
+          id: "saved",
+          x: 50,
+          y: 100,
+          element: "div section",
+          elementPath: "div > section",
+          elementLocator: locator,
+          componentName: "DevSection",
+          sourceLocation: "wrong.tsx:1",
+          comment: "Make the button larger",
+          timestamp: Date.now(),
+        }]));
+        const onCopy = vi.fn();
+        render(<PageFeedbackToolbarCSS onCopy={onCopy} />);
+        fireEvent.click(screen.getByTitle("Start feedback mode"));
+        await waitFor(() => expect(screen.getByText("Copy feedback")).toBeDefined());
+        fireEvent.keyDown(document, { key: "c" });
+        await waitFor(() => expect(mockClipboard.writeText).toHaveBeenCalledOnce());
+        const output = mockClipboard.writeText.mock.calls[0][0];
+        expect(output).toContain(locator);
+        expect(output).toContain("Make the button larger");
+        expect(output).not.toContain("DevSection");
+        expect(output).not.toContain("Possible component");
+        expect(onCopy).toHaveBeenCalledWith(output);
+      },
+    );
+
+    it("captures ancestor identifiers when annotating a nested element", async () => {
+      const onAnnotationAdd = vi.fn();
+      render(<>
+        <button data-testid="save-report" aria-label="Save report"><span>Save</span></button>
+        <PageFeedbackToolbarCSS onAnnotationAdd={onAnnotationAdd} />
+      </>);
+      const target = screen.getByText("Save");
+      // jsdom has no layout or hit testing. The browser test covers real hit testing.
+      Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => target });
+      fireEvent.click(screen.getByTitle("Start feedback mode"));
+      await waitFor(() => expect(screen.getByText("Copy feedback")).toBeDefined());
+      fireEvent.click(target, { clientX: 100, clientY: 100 });
+      fireEvent.change(await screen.findByPlaceholderText("What should change?"), { target: { value: "Make the button larger" } });
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+      await waitFor(() => expect(onAnnotationAdd).toHaveBeenCalledOnce());
+      const annotation = onAnnotationAdd.mock.calls[0][0];
+      expect(annotation.elementLocator).toContain("whose ancestor has");
+      expect(annotation.elementLocator).toContain('data test ID (data-testid) equal to "save-report"');
+      expect(annotation.elementLocator).toContain('accessibility role equal to "button" and name equal to "Save report"');
+    });
+  });
+
   describe("onAnnotationAdd callback", () => {
     it("should accept onAnnotationAdd prop without errors", () => {
       const handleAnnotation = vi.fn();
